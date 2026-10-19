@@ -73,15 +73,14 @@ button.p:hover{background:var(--bg);color:var(--tx)}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important}}
 </style></head><body><main>
 <header><div><h1 id="home">Resource Hub</h1><p class="tag">Semester &middot; Subject &middot; Exam</p><p class="tag" id="st" style="margin-top:4px"></p></div>
-<div class="tools"><button class="sm" id="mysem" title="Change my semester" hidden></button><button class="sm" id="auth">Sign in</button><button id="theme" aria-label="Toggle dark mode">&#9680;</button></div></header>
-<div id="authbox"></div>
+<div class="tools"><button class="sm" id="mysem" title="Change my semester" hidden></button><button id="theme" aria-label="Toggle dark mode">&#9680;</button></div></header>
 <div id="bar"><button class="sm" id="back" hidden>&larr; Back</button><nav id="crumbs" aria-label="Breadcrumb"></nav></div>
 <div id="view"></div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
-var EX=["Mid","Final","Quiz"],C=window.CONFIG||{},sb=null,user=null,admin=false,SUBJ=[],RES=[],DONE={},sem=null,sub=null,ex=null,mySem=null;
+var EX=["Mid","Final","Quiz"],C=window.CONFIG||{},sb=null,SUBJ=[],RES=[],DONE={},sem=null,sub=null,ex=null,mySem=null;
 try{mySem=parseInt(localStorage.getItem("hub.mysem"))||null}catch(e){}
 var view=document.getElementById("view"),crumbs=document.getElementById("crumbs"),root=document.documentElement;
 function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
@@ -99,29 +98,6 @@ async function load(){
  var a=await sb.from("subjects").select("*").order("name"),b=await sb.from("resources").select("*").order("created_at"),c=await sb.from("semester_status").select("*");
  if(a.error||b.error||c.error){st("Could not load data");return}
  SUBJ=a.data;RES=b.data;DONE={};c.data.forEach(function(r){DONE[r.semester]=r.done});st("");render()}
-async function refreshUser(){
- var r=await sb.auth.getSession();user=r.data.session?r.data.session.user:null;admin=false;
- if(user){var q=await sb.from("admins").select("user_id").eq("user_id",user.id).maybeSingle();admin=!!q.data}
- document.getElementById("auth").textContent=user?"Sign out":"Sign in";
- if(user)document.getElementById("authbox").innerHTML="";
- await load()}
-/* auth */
-document.getElementById("auth").onclick=async function(){
- if(!sb){st("Supabase is not configured in config.js yet");return}
- if(user){await sb.auth.signOut();return}
- var b=document.getElementById("authbox");if(b.firstChild){b.innerHTML="";return}
- var p=el("div","panel");p.style.marginTop="0";p.style.marginBottom="18px";
- p.innerHTML='<label class="f" for="em">Email</label><input id="em" type="email" autocomplete="email" placeholder="you@gmail.com"><label for="pw">Password (min 6 characters)</label><input id="pw" type="password" autocomplete="current-password"><div class="err" id="aerr"></div><div class="row" style="display:flex;gap:8px;flex-wrap:wrap"><button class="p" id="login">Sign in</button><button class="p" id="signup" style="background:var(--bg);color:var(--tx)">Create account</button></div>';
- b.appendChild(p);
- function vals(){var e=document.getElementById("aerr"),m=document.getElementById("em").value.trim(),w=document.getElementById("pw").value;
-  if(!m||w.length<6){e.textContent="Enter your email and a password of 6+ characters.";return null}e.textContent="";return{email:m,password:w}}
- document.getElementById("login").onclick=async function(){var v=vals();if(!v)return;
-  var r=await sb.auth.signInWithPassword(v);if(r.error)document.getElementById("aerr").textContent=r.error.message==="Invalid login credentials"?"Wrong email or password.":r.error.message};
- document.getElementById("signup").onclick=async function(){var v=vals();if(!v)return;
-  var r=await sb.auth.signUp(v),e=document.getElementById("aerr");
-  if(r.error){e.textContent=r.error.message;return}
-  if(!r.data.session)e.textContent="Account created. Confirm it from the email we sent, then sign in."};
-};
 /* navigation */
 function go(s,b,x){sem=s;sub=b;ex=x;try{history.pushState({s:s,b:b,x:x},"")}catch(e){}render();window.scrollTo(0,0)}
 function back(){if(ex)go(sem,sub,null);else if(sub)go(sem,null,null);else if(sem)go(null,null,null)}
@@ -142,7 +118,6 @@ function celebrate(top,big){
  var t=el("div","ct");t.appendChild(el("div","tag",top));t.appendChild(el("div","big2",big));
  o.appendChild(s);o.appendChild(t);document.body.appendChild(o);
  function close(){if(o.parentNode)o.parentNode.removeChild(o)}o.onclick=close;setTimeout(close,2800)}
-function needLogin(w){w.appendChild(el("p","sub","Sign in (top right) to add subjects and resources."))}
 /* render */
 function render(){
  view.innerHTML="";var w=el("div","fade");view.appendChild(w);crumbs.innerHTML="";
@@ -160,13 +135,10 @@ function render(){
   w.appendChild(g);return}
  if(!subj){w.appendChild(head("02","Semester "+pad(sem)));
   var bn=el("div","banner"+(done(sem)?" done":""));bn.appendChild(el("span",null,done(sem)?"\u2713 Semester complete":"In progress"));
-  if(admin&&!(mySem&&sem<mySem)){var tb=el("button","sm",done(sem)?"Reopen":"Mark finished");tb.onclick=async function(){var v=!done(sem);var r=await sb.from("semester_status").upsert({semester:sem,done:v});if(r.error){st(r.error.message);return}DONE[sem]=v;render();if(v)celebrate("Semester "+pad(sem),"Complete")};bn.appendChild(tb)}
   w.appendChild(bn);
   var list=subsIn(sem),g2=el("div","grid");if(!list.length)w.appendChild(el("p","sub","No subjects yet."));
   list.forEach(function(s){var c=el("div","cell");c.appendChild(opt(s.name,resOf(s.id).length+" resources",function(){go(sem,s.id,null)},true));
-   if(admin||(user&&s.created_by===user.id)){var x=el("button","del","\u00d7");x.title="Delete subject";arm(x,"",async function(){var r=await sb.from("subjects").delete().eq("id",s.id);if(r.error)st(r.error.message);await load()});c.appendChild(x)}
    g2.appendChild(c)});w.appendChild(g2);
-  if(!user){needLogin(w);return}
   var p=el("div","panel");p.innerHTML='<label class="f" for="ns">Add a subject</label><input id="ns" placeholder="e.g. Data Structures (CSE 221)"><div class="err" id="err"></div><button class="p" id="addSub">Add subject</button>';w.appendChild(p);
   var add=async function(){var v=document.getElementById("ns").value.trim(),e=document.getElementById("err");if(!v)return;
    if(list.some(function(s){return s.name.toLowerCase()===v.toLowerCase()})){e.textContent="That subject already exists.";return}
@@ -177,21 +149,16 @@ function render(){
  w.appendChild(head("04",ex));var items=resOf(sub,ex),l=el("div");
  if(!items.length)l.appendChild(el("p","sub","No "+ex+" resources yet."));
  items.forEach(function(r){var row=el("div","res"),c=el("div");c.appendChild(el("span","k",r.kind==="yt"?"Video":"File"));
-  if(!r.approved)c.appendChild(el("span","k","Pending"));
   var a=el("a",null,r.title);a.href=r.url;a.target="_blank";a.rel="noopener noreferrer";c.appendChild(a);row.appendChild(c);
-  var acts=el("div","acts");
-  if(admin&&!r.approved){var ap=el("button","sm","Approve");ap.onclick=async function(){var q=await sb.from("resources").update({approved:true}).eq("id",r.id);if(q.error)st(q.error.message);await load()};acts.appendChild(ap)}
-  if(admin||(user&&r.created_by===user.id)){var x=el("button","sm","\u00d7");arm(x,"",async function(){var q=await sb.from("resources").delete().eq("id",r.id);if(q.error)st(q.error.message);await load()});acts.appendChild(x)}
-  row.appendChild(acts);l.appendChild(row)});w.appendChild(l);
- if(!user){needLogin(w);return}
- var f=el("div","panel");f.innerHTML='<label class="f" for="t">Title</label><input id="t" placeholder="e.g. 2025 question + solution"><label for="k">Type</label><select id="k"><option value="drive">Drive file</option><option value="yt">YouTube tutorial</option></select><label for="u">Link</label><input id="u" inputmode="url" placeholder="https://drive.google.com/ or https://youtu.be/"><div class="err" id="err"></div><button class="p" id="addRes">'+(admin?"Add resource":"Submit for approval")+'</button>';w.appendChild(f);
+  l.appendChild(row)});w.appendChild(l);
+ var f=el("div","panel");f.innerHTML='<label class="f" for="t">Title</label><input id="t" placeholder="e.g. 2025 question + solution"><label for="k">Type</label><select id="k"><option value="drive">Drive file</option><option value="yt">YouTube tutorial</option></select><label for="u">Link</label><input id="u" inputmode="url" placeholder="https://drive.google.com/ or https://youtu.be/"><div class="err" id="err"></div><button class="p" id="addRes">Add resource</button>';w.appendChild(f);
  document.getElementById("addRes").onclick=async function(){
   var t=document.getElementById("t").value.trim(),u=document.getElementById("u").value.trim(),k=document.getElementById("k").value,er=document.getElementById("err");
   if(!t||!u){er.textContent="Add a title and a link.";return}if(!/^https?:\/\//i.test(u))u="https://"+u;
   if(k==="yt"?!/^https:\/\/((www|m)\.)?(youtube\.com|youtu\.be)\//.test(u):!/^https:\/\/(drive|docs)\.google\.com\//.test(u)){er.textContent=k==="yt"?"Please use a YouTube link.":"Please use a Google Drive link.";return}
   if(items.some(function(r){return r.url===u})){er.textContent="That link is already added.";return}
-  var r=await sb.from("resources").insert({subject_id:sub,exam:ex,kind:k,title:t,url:u,approved:admin});
-  if(r.error){er.textContent=r.error.message;return}await load();if(!admin)st("Submitted \u2014 an admin will approve it.")}}
+  var r=await sb.from("resources").insert({subject_id:sub,exam:ex,kind:k,title:t,url:u,approved:true});
+  if(r.error){er.textContent=r.error.message;return}await load()}}
 /* which semester are you in */
 function upd(){var b=document.getElementById("mysem");b.hidden=!mySem;b.textContent=mySem?"Sem "+pad(mySem):""}
 function askSem(first){
@@ -209,6 +176,6 @@ function askSem(first){
 document.getElementById("mysem").onclick=function(){askSem(false)};
 /* boot */
 var cfgOK=C.SUPABASE_URL&&C.SUPABASE_ANON_KEY&&C.SUPABASE_URL.indexOf("YOUR-")<0&&C.SUPABASE_ANON_KEY.indexOf("YOUR-")<0;
-try{if(!cfgOK)throw 0;sb=supabase.createClient(C.SUPABASE_URL,C.SUPABASE_ANON_KEY);sb.auth.onAuthStateChange(function(){refreshUser()})}catch(e){sb=null}
-render();upd();if(sb)refreshUser();if(!mySem)askSem(true);
+try{if(!cfgOK)throw 0;sb=supabase.createClient(C.SUPABASE_URL,C.SUPABASE_ANON_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}})}catch(e){sb=null}
+render();upd();if(sb)load();if(!mySem)askSem(true);
 </script></body></html>
